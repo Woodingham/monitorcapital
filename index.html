@@ -151,66 +151,79 @@
         { t: "USDT", d: "Tether. Criptomoneda estable que mantiene paridad 1:1 con el dólar." }
     ];
 
-    // MOTOR DE DATOS (ENDPOINT CON PROXY)
+    // MOTOR AUTÓNOMO DE DATOS
     async function sync() {
-    const badge = document.getElementById('status-badge');
-    const PROXY = "https://api.allorigins.win/raw?url=";
-    const urlDolar = "https://dolarapi.com/v1/dolares";
-    const urlTasas = "https://api.argentinadatos.com/v1/data/cotizaciones/tasas/plazoFijo";
+        const badge = document.getElementById('status-badge');
+        const PROXY = "https://api.allorigins.win/raw?url=";
+        const ts = Date.now();
+        
+        console.log("Reintentando conexión automática...");
+        badge.innerText = "ACTUALIZANDO...";
+        badge.className = "bg-sky-100 px-3 py-1 text-sky-800 uppercase font-bold text-[10px] animate-pulse";
 
-    console.log("Sincronizando de forma resiliente...");
+        const fetchData = async (url) => {
+            try {
+                // Intento 1: Directo con rompe-cache
+                const res = await fetch(`${url}?t=${ts}`);
+                if (res.ok) return await res.json();
+            } catch (e) {
+                // Intento 2: Proxy
+                try {
+                    const resP = await fetch(PROXY + encodeURIComponent(`${url}?t=${ts}`));
+                    if (resP.ok) return await resP.json();
+                } catch (e2) { return null; }
+            }
+            return null;
+        };
 
-    const fetchData = async (url) => {
-        // Intento 1: Directo (más rápido)
         try {
-            const res = await fetch(url + "?t=" + Date.now());
-            if (res.ok) return await res.json();
-        } catch (e) { console.warn("Fallo directo, intentando proxy..."); }
-
-        // Intento 2: Proxy (más compatible)
-        try {
-            const res = await fetch(PROXY + encodeURIComponent(url));
-            if (res.ok) return await res.json();
-        } catch (e) { throw new Error("Fallo total de red"); }
-    };
-
-    try {
-        const dataD = await fetchData(urlDolar);
-        if (dataD) {
-            dataD.forEach(d => {
-                if (d.casa === "mep") FINANZAS.mep = d.venta;
-                if (d.casa === "blue") FINANZAS.blue = d.venta;
-                if (d.casa === "oficial") FINANZAS.oficial = d.venta;
-                if (d.casa === "cripto") FINANZAS.cripto = d.venta;
-            });
-            // GUARDAR ÉXITO: Si funcionó, guardamos en la memoria del navegador
-            localStorage.setItem('finanzas_cache', JSON.stringify(FINANZAS));
-            badge.innerText = "DATOS EN VIVO";
-            badge.className = "bg-emerald-500 text-white px-3 py-1 text-[10px] font-bold rounded";
+            const dataD = await fetchData("https://dolarapi.com/v1/dolares");
+            if (dataD) {
+                dataD.forEach(d => {
+                    if (d.casa === "mep") FINANZAS.mep = d.venta;
+                    if (d.casa === "blue") FINANZAS.blue = d.venta;
+                    if (d.casa === "oficial") FINANZAS.oficial = d.venta;
+                    if (d.casa === "cripto") FINANZAS.cripto = d.venta;
+                });
+                localStorage.setItem('monitor_cache', JSON.stringify(FINANZAS));
+                badge.innerText = "ONLINE";
+                badge.className = "bg-emerald-500 text-white px-3 py-1 text-[10px] font-bold rounded";
+                
+                // Si tuvo éxito, reintenta en 5 minutos
+                setTimeout(sync, 300000); 
+            } else {
+                throw new Error("Sin respuesta");
+            }
+        } catch (error) {
+            // Si falló, usa cache y reintenta RÁPIDO (en 30 segundos)
+            const cache = localStorage.getItem('monitor_cache');
+            if (cache) FINANZAS = JSON.parse(cache);
+            
+            badge.innerText = "REINTENTANDO CONEXIÓN...";
+            badge.className = "bg-amber-500 text-white px-3 py-1 text-[10px] font-bold rounded";
+            
+            setTimeout(sync, 30000); 
         }
 
-        const dataT = await fetchData(urlTasas);
-        if (dataT && dataT.length > 0) {
-            let pf = FINANZAS.tasas.find(t => t.nombre === "Plazo Fijo");
-            if(pf) pf.valor = dataT[dataT.length - 1].valor;
-        }
-
-    } catch (error) {
-        // RECUPERAR ÉXITO ANTERIOR: Si internet falla, usamos lo último que guardamos
-        const cache = localStorage.getItem('finanzas_cache');
-        if (cache) {
-            FINANZAS = JSON.parse(cache);
-            badge.innerText = "DATOS LOCALES (CACHE)";
-            badge.className = "bg-blue-500 text-white px-3 py-1 text-[10px] font-bold rounded";
-        } else {
-            badge.innerText = "SIN CONEXIÓN";
-            badge.className = "bg-red-500 text-white px-3 py-1 text-[10px] font-bold rounded";
-        }
+        render();
+        if(typeof initChart === 'function') initChart();
     }
 
-    render();
-    if(typeof initChart === 'function') initChart();
-}
+    // INICIO ÚNICO
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('fecha-header').innerText = new Date().toLocaleDateString();
+        // Disparar la primera vez
+        sync(); 
+        
+        // El resto de los eventos (inputs) se mantienen igual
+        document.getElementById('inputCapital').oninput = () => {
+            const v = parseFloat(document.getElementById('inputCapital').value) || 0;
+            const t = Math.max(...FINANZAS.tasas.map(x => x.valor));
+            document.getElementById('resCalculo').innerText = fmt((v * (t/100) * 30) / 365);
+        };
+        document.getElementById('inputAlq').oninput = updateAlq;
+        document.getElementById('inputCustomPct').oninput = updateAlq;
+    });
     // MOTOR DE RENDERIZADO
     function render() {
         // Render Ranking Ordenado
@@ -318,5 +331,6 @@
 </body>
 
 </html>
+
 
 
