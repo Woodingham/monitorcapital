@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>monitor de capital | terminal financiera</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Lora:wght@400;700&family=Playfair+Display:wght@700;900&family=JetBrains+Mono:wght@500;800&display=swap');
+        :root { --paper: #fdfcf9; --ink: #1a1a1a; }
+        body { background-color: #efede8; font-family: 'Lora', serif; color: var(--ink); padding: 10px; font-style: normal !important; text-transform: lowercase; font-size: 18px; }
+        * { font-style: normal !important; }
+        /* regla para forzar mayúscula al inicio de párrafos y tras puntos */
+        p::first-letter, li::first-letter, h3::first-letter, h4::first-letter, h5::first-letter { text-transform: uppercase; }
+        .newspaper-container { background-color: var(--paper); max-width: 1200px; margin: 0 auto; padding: 30px; border: 1px solid #d1d1d1; box-shadow: 10px 10px 0px rgba(0,0,0,0.05); min-height: 100vh; }
+        h1 { font-family: 'Playfair Display', serif; letter-spacing: -2px; font-size: 3.5rem !important; line-height: 1; text-transform: lowercase; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .double-line { border-top: 6px double var(--ink); border-bottom: 2px solid var(--ink); }
+        nav button { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: bold; padding: 12px; border-bottom: 3px solid transparent; }
+        nav button.active { border-bottom: 3px solid var(--ink); background: rgba(0,0,0,0.05); }
+        .view { display: none; }
+        .view.active { display: block; }
+        .divisa-card { border: 2px solid var(--ink); padding: 2rem; text-align: center; background: white; }
+        .ganadora { border: 3px solid #10b981; background: #f0fdf4; transform: scale(1.02); position: relative; }
+        .ganadora::after { content: '★ tasa líder'; position: absolute; top: -12px; right: 15px; background: #10b981; color: white; font-family: 'JetBrains Mono'; font-size: 10px; padding: 4px 8px; font-weight: 800; border-radius: 3px; }
+        .chart-container { position: relative; height: 400px; width: 100%; margin-bottom: 30px; }
+        input, select { text-transform: lowercase; font-size: 1.2rem; }
+        .tasa-valor { font-size: 2.5rem !important; }
+        .glosario-p { text-transform: none; } /* para manejar manualmente las mayúsculas internas */
+    </style>
+</head>
+<body>
+
+<div class="newspaper-container">
+    <header class="text-center mb-10">
+        <div class="flex justify-between items-end mb-4 mono font-bold text-[12px]">
+            <span id="fecha-header">...</span>
+            <span id="status-badge" class="bg-amber-100 px-3 py-1 text-amber-800">sincronizando...</span>
+        </div>
+        <div class="double-line py-8">
+            <h1 class="font-black tracking-tighter">monitor de capital</h1>
+            <p class="text-xl md:text-2xl font-medium text-stone-600 tracking-widest mt-2">sistema de monitoreo de tasas y divisas</p>
+        </div>
+        <nav class="flex flex-wrap justify-center gap-2 md:gap-6 border-b border-black/10 mt-6 overflow-x-auto pb-2">
+            <button onclick="switchView('portada')" id="btn-portada" class="active">portada</button>
+            <button onclick="switchView('divisas')" id="btn-divisas">divisas</button>
+            <button onclick="switchView('crypto')" id="btn-crypto">crypto</button>
+            <button onclick="switchView('historico')" id="btn-historico">histórico</button>
+            <button onclick="switchView('calculos')" id="btn-calculos">cálculos</button>
+            <button onclick="switchView('estrategias')" id="btn-estrategias">análisis</button>
+            <button onclick="switchView('glosario')" id="btn-glosario">glosario</button>
+        </nav>
+    </header>
+
+    <div id="view-portada" class="view active">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-10">
+            <main class="lg:col-span-8">
+                <h3 class="font-black border-b-2 border-black inline-block mb-8 text-stone-500 text-lg">ranking de rendimientos vigentes</h3>
+                <div id="cont-tasas" class="space-y-6"></div>
+            </main>
+            <aside class="lg:col-span-4 border-l-2 border-black/10 pl-8">
+                <div class="bg-stone-100 p-6 border-2 border-black/10">
+                    <h4 class="font-black text-xs uppercase mb-4 text-emerald-900 tracking-widest">variables macro</h4>
+                    <p class="text-lg mb-4 border-b border-black/5 pb-4">dólar mep: <span id="val-mep-side" class="font-bold">--</span></p>
+                    <p class="text-lg">inflación est.: <span class="font-bold text-rose-700">2.5%</span></p>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <div id="view-divisas" class="view">
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6" id="cont-divisas"></div>
+    </div>
+
+    <div id="view-crypto" class="view">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div class="divisa-card border-indigo-400 bg-indigo-50">
+                <span class="mono text-sm font-bold text-indigo-900">usdt (tether)</span>
+                <p class="text-4xl font-black my-2">$1533</p>
+                <p class="text-xs opacity-60">Paridad dólar 1:1 vía p2p. Es la stablecoin más utilizada.</p>
+            </div>
+            <div class="divisa-card border-amber-400 bg-amber-50">
+                <span class="mono text-sm font-bold text-amber-900">bitcoin (btc)</span>
+                <p class="text-4xl font-black my-2">$94,120</p>
+                <p class="text-xs opacity-60">Reserva de valor digital. El activo más importante del ecosistema.</p>
+            </div>
+            <div class="divisa-card border-blue-400 bg-blue-50">
+                <span class="mono text-sm font-bold text-blue-900">ethereum (eth)</span>
+                <p class="text-4xl font-black my-2">$2,380</p>
+                <p class="text-xs opacity-60">Red de contratos inteligentes. Infraestructura para finanzas descentralizadas.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="view-historico" class="view">
+        <div class="bg-white p-6 border-2 border-black shadow-sm mb-8">
+            <div class="chart-container">
+                <canvas id="chartHistorico"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div id="view-calculos" class="view">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
+            <div class="p-10 border-4 border-black bg-white shadow-[12px_12px_0px_black]">
+                <h4 class="font-black mb-6 text-sm">simulador inversión 30 días</h4>
+                <input type="number" id="inputCapital" placeholder="1000000" class="w-full text-5xl font-bold mb-6 bg-stone-50 p-4 border-b-4 border-black outline-none">
+                <p id="resCalculo" class="mono text-6xl font-black text-emerald-900">$ 0</p>
+            </div>
+            <div class="p-10 border-4 border-black bg-stone-900 text-white shadow-[12px_12px_0px_rgba(0,0,0,0.2)]">
+                <h4 class="font-black mb-6 border-b border-stone-700 text-sm">ajuste de alquiler</h4>
+                <input type="number" id="inputAlq" class="w-full bg-transparent text-white text-5xl font-bold mb-6 border-b-4 border-stone-600 outline-none" placeholder="monto inicial">
+                <div class="flex flex-col gap-4 mb-6">
+                    <select id="selectAlq" onchange="handleAlqChange()" class="w-full bg-stone-800 text-white p-4 outline-none font-bold text-lg">
+                        <option value="0.15">trimestral (+15%)</option>
+                        <option value="0.30">cuatrimestral (+30%)</option>
+                        <option value="0.45">semestral (+45%)</option>
+                        <option value="custom">ajuste manual %</option>
+                    </select>
+                    <input type="number" id="inputCustomPct" class="hidden w-full bg-white text-black p-4 text-2xl font-bold outline-none" placeholder="ingrese % (ej: 25)">
+                </div>
+                <p id="resAlq" class="mono text-5xl font-black text-indigo-400">$ 0</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="view-estrategias" class="view">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
+            <div class="border-l-8 border-black pl-8">
+                <h3 class="font-black text-2xl mb-4">escenario de carry trade</h3>
+                <p class="text-lg leading-relaxed mb-6">El contexto actual muestra una calma relativa en los dólares financieros. Esto permite que las tasas en pesos superen la tasa de devaluación mensual. Esta dinámica es efectiva mientras la brecha no se dispare. Los inversores aprovechan el interés alto para luego volver al dólar.</p>
+            </div>
+            <div class="border-l-8 border-emerald-500 pl-8">
+                <h3 class="font-black text-2xl mb-4">tasa real vs inflación</h3>
+                <p class="text-lg leading-relaxed mb-6">Con una inflación proyectada a la baja, cualquier instrumento que rinda por encima del 3% mensual ofrece una tasa real positiva. Actualmente, el plazo fijo bancario se encuentra en el límite de esta rentabilidad. Las letras del tesoro siguen siendo la opción preferida.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="view-glosario" class="view">
+        <h3 class="font-black border-b-2 border-black inline-block mb-8 text-stone-500 text-lg">diccionario técnico del inversor</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div class="border-l-2 border-black pl-4">
+                <h5 class="font-black text-lg mb-2">Arbitraje</h5>
+                <p class="text-sm opacity-80 glosario-p">Consiste en comprar un activo en un mercado y venderlo simultáneamente en otro. El objetivo es ganar con la diferencia de precios.</p>
+            </div>
+            <div class="border-l-2 border-black pl-4">
+                <h5 class="font-black text-lg mb-2">Brecha Cambiaria</h5>
+                <p class="text-sm opacity-80 glosario-p">Es la diferencia porcentual entre el dólar oficial y los dólares paralelos o financieros. Una brecha alta suele indicar inestabilidad.</p>
+            </div>
+            <div class="border-l-2 border-black pl-4">
+                <h5 class="font-black text-lg mb-2">Cauciones</h5>
+                <p class="text-sm opacity-80 glosario-p">Son préstamos a corto plazo en el mercado bursátil. Funcionan como un plazo fijo pero con mayor flexibilidad de días.</p>
+            </div>
+            <div class="border-l-2 border-black pl-4">
+                <h5 class="font-black text-lg mb-2">Dólar CCL</h5>
+                <p class="text-sm opacity-80 glosario-p">Dólar Contado con Liquidación. Se utiliza para fugar divisas al exterior legalmente mediante la compra y venta de acciones o bonos.</p>
+            </div>
+            <div class="border-l-2 border-black pl-4">
+                <h5 class="font-black text-lg mb-2">Dólar MEP</h5>
+                <p class="text-sm opacity-80 glosario-p">Dólar Mercado Electrónico de Pagos. Es el dólar bolsa que se adquiere legalmente operando activos que cotizan en ambas monedas.</p>
+            </div>
+            <div class="border-l-2 border-black pl-4">
+                <h5 class="font-black text-lg mb-2">FCI (Fondos Comunes)</h5>
+                <p class="text-sm opacity-80 glosario-p">Patrimonios formados por aportes de inversores. Son administrados por profesionales para diversificar el riesgo automáticamente.</p>
+            </div>
+            <div class="border-l-2 border-black pl-4">
+                <h5 class="font-black text-lg mb-2">Lecaps</h5>
+                <p class="text-sm opacity-80 glosario-p">Letras de Capitalización emitidas por el Tesoro. Pagan una tasa fija y son el instrumento estrella para ganarle a la inflación.</p>
+            </div>
+            <div class="border-l-2 border-black pl-4">
+                <h5 class="font-black text-lg mb-2">Parking</h5>
+                <p class="text-sm opacity-80 glosario-p">Tiempo obligatorio que un inversor debe mantener un bono en su cartera antes de poder venderlo para hacerse de dólares.</p>
+            </div>
+            <div class="border-l-2 border-black pl-4">
+                <h5 class="font-black text-lg mb-2">Spread</h5>
+                <p class="text-sm opacity-80 glosario-p">Diferencia entre el precio de compra (bid) y el precio de venta (ask). Cuanto menor es el spread, más líquido es el activo.</p>
+            </div>
+            <div class="border-l-2 border-black pl-4">
+                <h5 class="font-black text-lg mb-2">Tasa Badlar</h5>
+                <p class="text-sm opacity-80 glosario-p">Es la tasa de interés para depósitos de más de un millón de pesos. Se usa como referencia para grandes inversores y bancos.</p>
+            </div>
+            <div class="border-l-2 border-black pl-4">
+                <h5 class="font-black text-lg mb-2">Tasa Efectiva Anual (TEA)</h5>
+                <p class="text-sm opacity-80 glosario-p">Representa el costo o rendimiento total considerando la reinversión de los intereses. Es el dato real que debe mirar el inversor.</p>
+            </div>
+            <div class="border-l-2 border-black pl-4">
+                <h5 class="font-black text-lg mb-2">Yield</h5>
+                <p class="text-sm opacity-80 glosario-p">Es el rendimiento que genera una inversión en un periodo determinado, expresado generalmente como un porcentaje anualizado.</p>
+            </div>
+        </div>
+    </div>
+
+    <footer class="mt-16 pt-6 border-t-2 border-black flex justify-between mono text-[12px] font-bold opacity-60">
+        <span id="update-info">...</span>
+        <span>terminal v19.5</span>
+    </footer>
+</div>
+
+<script>
+    let FINANZAS = { 
+        mep: 1496, blue: 1510, oficial: 1485, tarjeta: 1590, cripto: 1533,
+        tasas: [
+            { nombre: "lecaps (tesoro)", valor: 42.5, desc: "Tasa fija del tesoro nacional." },
+            { nombre: "plazo fijo", valor: 35.0, desc: "Rendimiento promedio bancario." },
+            { nombre: "caución", valor: 32.2, desc: "Tasa bursátil de corto plazo." },
+            { nombre: "billeteras", valor: 30.5, desc: "Tasa de saldos disponibles." }
+        ]
+    };
+
+    const fmt = n => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(n);
+
+    function switchView(id) {
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+        document.getElementById('view-' + id).classList.add('active');
+        document.getElementById('btn-' + id).classList.add('active');
+    }
+
+    function handleAlqChange() {
+        const sel = document.getElementById('selectAlq').value;
+        const customInput = document.getElementById('inputCustomPct');
+        customInput.classList.toggle('hidden', sel !== 'custom');
+        updateAlq();
+    }
+
+    function updateAlq() {
+        const val = parseFloat(document.getElementById('inputAlq').value) || 0;
+        const sel = document.getElementById('selectAlq').value;
+        const customPctInput = document.getElementById('inputCustomPct');
+        let pct = (sel === 'custom') ? (parseFloat(customPctInput.value) || 0) / 100 : parseFloat(sel);
+        document.getElementById('resAlq').innerText = fmt(val * (1 + pct));
+    }
+
+    function initChart() {
+        const ctx = document.getElementById('chartHistorico').getContext('2d');
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ["1 ene", "3 ene", "5 ene", "7 ene", "hoy"],
+                datasets: [{
+                    label: 'dólar mep ($)', data: [1420, 1450, 1445, 1480, 1496],
+                    borderColor: '#1a1a1a', yAxisID: 'y', borderWidth: 4, tension: 0
+                }, {
+                    label: 'tasa (%)', data: [37, 36.5, 36, 35.5, 35],
+                    borderColor: '#10b981', yAxisID: 'y1', borderWidth: 3, borderDash: [5, 5]
+                }]
+            },
+            options: { maintainAspectRatio: false }
+        });
+    }
+
+    function render() {
+        const contT = document.getElementById('cont-tasas');
+        contT.innerHTML = '';
+        const ranking = [...FINANZAS.tasas].sort((a,b) => b.valor - a.valor);
+        ranking.forEach((t, i) => {
+            contT.innerHTML += `<div class="p-8 flex justify-between items-center bg-white border-2 border-black ${i === 0 ? 'ganadora' : ''}">
+                <div><p class="font-bold text-xl">${t.nombre}</p><p class="text-sm opacity-60">${t.desc}</p></div>
+                <div class="text-right"><p class="tasa-valor font-black mono">${t.valor.toFixed(1)}%</p></div>
+            </div>`;
+        });
+        document.getElementById('cont-divisas').innerHTML = `
+            <div class="divisa-card"><span class="mono text-sm opacity-50">blue</span><p class="text-4xl font-black">$${FINANZAS.blue}</p></div>
+            <div class="divisa-card"><span class="mono text-sm opacity-50">mep</span><p class="text-4xl font-black">$${FINANZAS.mep}</p></div>
+            <div class="divisa-card"><span class="mono text-sm opacity-50">oficial</span><p class="text-4xl font-black">$${FINANZAS.oficial}</p></div>
+            <div class="divisa-card"><span class="mono text-sm opacity-50">tarjeta</span><p class="text-4xl font-black">$${FINANZAS.tarjeta}</p></div>`;
+        
+        document.getElementById('val-mep-side').innerText = "$" + FINANZAS.mep;
+        document.getElementById('update-info').innerText = "Actualizado: " + new Date().toLocaleTimeString();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('fecha-header').innerText = new Date().toLocaleDateString('es-AR').toLowerCase();
+        render();
+        initChart();
+        document.getElementById('inputCapital').oninput = () => {
+            const r = [...FINANZAS.tasas].sort((a,b) => b.valor - a.valor);
+            const val = parseFloat(document.getElementById('inputCapital').value) || 0;
+            document.getElementById('resCalculo').innerText = fmt((val * (r[0].valor/100) * 30) / 365);
+        };
+        document.getElementById('inputAlq').oninput = updateAlq;
+        document.getElementById('inputCustomPct').oninput = updateAlq;
+    });
+</script>
+</body>
+</html>
