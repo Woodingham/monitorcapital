@@ -153,48 +153,64 @@
 
     // MOTOR DE DATOS (ENDPOINT CON PROXY)
     async function sync() {
-        const badge = document.getElementById('status-badge');
-        // PROXY 1 (Principal) y PROXY 2 (Respaldo)
-        const PROXY = "https://api.allorigins.win/raw?url=";
-        const ts = new Date().getTime(); // Para romper el caché
-        
-        console.log("Sincronizando...");
+    const badge = document.getElementById('status-badge');
+    const PROXY = "https://api.allorigins.win/raw?url=";
+    const urlDolar = "https://dolarapi.com/v1/dolares";
+    const urlTasas = "https://api.argentinadatos.com/v1/data/cotizaciones/tasas/plazoFijo";
 
+    console.log("Sincronizando de forma resiliente...");
+
+    const fetchData = async (url) => {
+        // Intento 1: Directo (más rápido)
         try {
-            // Intento 1: Con Proxy y rompe-caché
-            const urlDolar = encodeURIComponent(`https://dolarapi.com/v1/dolares?t=${ts}`);
-            const res = await fetch(PROXY + urlDolar);
-            
-            if (!res.ok) throw new Error("Fallo Proxy");
-            
-            const dataD = await res.json();
-            
-            // Si hay datos, actualizamos el objeto global
+            const res = await fetch(url + "?t=" + Date.now());
+            if (res.ok) return await res.json();
+        } catch (e) { console.warn("Fallo directo, intentando proxy..."); }
+
+        // Intento 2: Proxy (más compatible)
+        try {
+            const res = await fetch(PROXY + encodeURIComponent(url));
+            if (res.ok) return await res.json();
+        } catch (e) { throw new Error("Fallo total de red"); }
+    };
+
+    try {
+        const dataD = await fetchData(urlDolar);
+        if (dataD) {
             dataD.forEach(d => {
                 if (d.casa === "mep") FINANZAS.mep = d.venta;
                 if (d.casa === "blue") FINANZAS.blue = d.venta;
                 if (d.casa === "oficial") FINANZAS.oficial = d.venta;
                 if (d.casa === "cripto") FINANZAS.cripto = d.venta;
             });
-
-            badge.innerText = "SISTEMA ONLINE";
+            // GUARDAR ÉXITO: Si funcionó, guardamos en la memoria del navegador
+            localStorage.setItem('finanzas_cache', JSON.stringify(FINANZAS));
+            badge.innerText = "DATOS EN VIVO";
             badge.className = "bg-emerald-500 text-white px-3 py-1 text-[10px] font-bold rounded";
-
-        } catch (e) {
-            console.warn("Error de conexión, usando datos de respaldo.");
-            // DATOS DE RESPALDO REALES (Hoy 2026)
-            // Si la API falla, al menos mostramos valores cercanos a la realidad
-            FINANZAS.mep = 1440;
-            FINANZAS.blue = 1470;
-            
-            badge.innerText = "MODO CONTINGENCIA (Valores Ref)";
-            badge.className = "bg-amber-500 text-white px-3 py-1 text-[10px] font-bold rounded";
         }
-        
-        render();
-        if(typeof initChart === 'function') initChart();
+
+        const dataT = await fetchData(urlTasas);
+        if (dataT && dataT.length > 0) {
+            let pf = FINANZAS.tasas.find(t => t.nombre === "Plazo Fijo");
+            if(pf) pf.valor = dataT[dataT.length - 1].valor;
+        }
+
+    } catch (error) {
+        // RECUPERAR ÉXITO ANTERIOR: Si internet falla, usamos lo último que guardamos
+        const cache = localStorage.getItem('finanzas_cache');
+        if (cache) {
+            FINANZAS = JSON.parse(cache);
+            badge.innerText = "DATOS LOCALES (CACHE)";
+            badge.className = "bg-blue-500 text-white px-3 py-1 text-[10px] font-bold rounded";
+        } else {
+            badge.innerText = "SIN CONEXIÓN";
+            badge.className = "bg-red-500 text-white px-3 py-1 text-[10px] font-bold rounded";
+        }
     }
 
+    render();
+    if(typeof initChart === 'function') initChart();
+}
     // MOTOR DE RENDERIZADO
     function render() {
         // Render Ranking Ordenado
@@ -302,4 +318,5 @@
 </body>
 
 </html>
+
 
